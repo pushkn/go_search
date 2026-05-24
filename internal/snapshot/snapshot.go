@@ -128,3 +128,7 @@ func (b *Builder) build(now time.Time) {
 	b.value.Store(result)
 	b.ready.Store(true)
 }
+
+func (b *Builder) BuildOnce() {
+	b.build(time.Now())
+}
