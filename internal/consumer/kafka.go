@@ -11,6 +11,7 @@ import (
 	"github.com/segmentio/kafka-go"
 
 	"github.com/pushkn/go_search/internal/domain"
+	"github.com/pushkn/go_search/internal/metrics"
 )
 
 type Deduper interface {
@@ -81,6 +82,20 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}(i)
 	}
 
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				stats := c.reader.Stats()
+				metrics.KafkaConsumerLag.Set(float64(stats.Lag))
+			}
+		}
+	}()
+	
 	for {
 		msg, err := c.reader.FetchMessage(ctx)
 		if err != nil {
@@ -114,8 +129,14 @@ func (c *Consumer) worker(ctx context.Context, id int, jobs <-chan kafka.Message
 }
 
 func (c *Consumer) process(msg kafka.Message) {
+	start := time.Now()
+	defer func() {
+		metrics.EventProcessingDuration.Observe(time.Since(start).Seconds())
+	}()
+
 	var ev domain.SearchEvent
 	if err := json.Unmarshal(msg.Value, &ev); err != nil {
+		metrics.EventsConsumed.WithLabelValues("dropped_unmarshal").Inc()
 		c.logger.Warn("unmarshal failed", "error", err, "offset", msg.Offset)
 		return
 	}
@@ -123,14 +144,20 @@ func (c *Consumer) process(msg kafka.Message) {
 
 	now := time.Now().UTC()
 	if err := ev.Validate(now); err != nil {
+		metrics.EventsConsumed.WithLabelValues("dropped_validation").Inc()
 		c.logger.Debug("invalid event", "error", err, "query", ev.Query)
 		return
 	}
 
 	if c.deduper.Seen(ev.UserID, ev.SessionID, ev.Query) {
+		metrics.EventsConsumed.WithLabelValues("dropped_dedup").Inc()
 		return
 	}
 
 	c.anomaly.Observe(ev.Query, now)
-	c.window.Add(ev.Query, ev.Timestamp, now)
+	if !c.window.Add(ev.Query, ev.Timestamp, now) {
+		metrics.EventsConsumed.WithLabelValues("dropped_stale").Inc()
+		return
+	}
+	metrics.EventsConsumed.WithLabelValues("ok").Inc()
 }

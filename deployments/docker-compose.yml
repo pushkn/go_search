@@ -56,3 +56,13 @@ services:
       kafka:
         condition: service_healthy
     restart: on-failure
+    
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: trending-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - app

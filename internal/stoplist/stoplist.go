@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/pushkn/go_search/internal/metrics"
 )
 
 type StopList struct {
@@ -22,7 +24,9 @@ func (s *StopList) Add(word string) {
 	}
 	s.mu.Lock()
 	s.words[word] = struct{}{}
+	size := len(s.words)
 	s.mu.Unlock()
+	metrics.StopListSize.Set(float64(size))
 }
 
 func (s *StopList) Remove(word string) bool {
@@ -36,9 +40,9 @@ func (s *StopList) Remove(word string) bool {
 		return false
 	}
 	delete(s.words, word)
+	metrics.StopListSize.Set(float64(len(s.words)))
 	return true
 }
-
 func (s *StopList) Contains(word string) bool {
 	s.mu.RLock()
 	_, ok := s.words[word]

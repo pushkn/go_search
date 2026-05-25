@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pushkn/go_search/internal/metrics"
 )
 
 type ctxKey int
@@ -72,4 +74,18 @@ func reqID(r *http.Request) string {
 		return v
 	}
 	return ""
+}
+
+func (s *Server) metricsMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metrics.HTTPInFlight.Inc()
+		defer metrics.HTTPInFlight.Dec()
+
+		start := time.Now()
+		sr := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(sr, r)
+		metrics.HTTPRequestDuration.
+			WithLabelValues(r.Method, r.URL.Path, strconv.Itoa(sr.status)).
+			Observe(time.Since(start).Seconds())
+	})
 }

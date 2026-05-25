@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/pushkn/go_search/internal/snapshot"
 	"github.com/pushkn/go_search/internal/stoplist"
@@ -49,8 +50,10 @@ func NewServer(cfg Config, logger *slog.Logger, builder *snapshot.Builder, sl *s
 	r := chi.NewRouter()
 	r.Use(requestID)
 	r.Use(s.recovery)
+	r.Use(s.metricsMW)
 	r.Use(s.logging)
 
+	r.Handle("/metrics", promhttp.Handler())
 	r.Get("/healthz", s.handleHealth)
 	r.Get("/readyz", s.handleReady)
 

@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pushkn/go_search/internal/metrics"
 	"github.com/pushkn/go_search/internal/topk"
 )
 
@@ -90,6 +91,12 @@ func (b *Builder) Start(ctx context.Context) {
 }
 
 func (b *Builder) build(now time.Time) {
+	start := time.Now()
+	defer func() {
+		metrics.SnapshotBuildDuration.Observe(time.Since(start).Seconds())
+		metrics.SnapshotLastBuilt.Set(float64(time.Now().Unix()))
+	}()
+
 	ss := b.window.Snapshot(now)
 	raw := ss.TopK(b.cfg.MaxSize * 2)
 
@@ -98,6 +105,7 @@ func (b *Builder) build(now time.Time) {
 		score float64
 	}
 	entries := make([]scored, 0, len(raw))
+	anomalyCount := 0
 	for _, e := range raw {
 		if b.stoplist != nil && b.stoplist.Contains(e.Query) {
 			continue
@@ -105,9 +113,11 @@ func (b *Builder) build(now time.Time) {
 		score := float64(e.Count)
 		if b.anomaly != nil && b.anomaly.IsAnomaly(e.Query, now) {
 			score *= b.cfg.AnomalyPenalty
+			anomalyCount++
 		}
 		entries = append(entries, scored{e.Query, score})
 	}
+	metrics.EventsMarkedAnomaly.Add(float64(anomalyCount))
 
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].score > entries[j].score
@@ -127,6 +137,7 @@ func (b *Builder) build(now time.Time) {
 
 	b.value.Store(result)
 	b.ready.Store(true)
+	metrics.SnapshotSize.Set(float64(len(result)))
 }
 
 func (b *Builder) BuildOnce() {
