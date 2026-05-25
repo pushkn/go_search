@@ -361,3 +361,91 @@ func BenchmarkAdd_Mixed_Zipf(b *testing.B) {
 		s.Add(q)
 	}
 }
+
+func TestAddN(t *testing.T) {
+	s := New(10)
+	s.AddN("hot", 100)
+	s.AddN("hot", 50)
+	s.AddN("warm", 10)
+	s.AddN("cold", 0)
+
+	top := s.TopK(10)
+	if len(top) != 2 {
+		t.Fatalf("len: got %d, want 2", len(top))
+	}
+
+	counts := map[string]int{}
+	for _, e := range top {
+		counts[e.Query] = e.Count
+	}
+	if counts["hot"] != 150 {
+		t.Errorf("hot: got %d, want 150", counts["hot"])
+	}
+	if counts["warm"] != 10 {
+		t.Errorf("warm: got %d, want 10", counts["warm"])
+	}
+}
+
+func TestAddN_EvictionUsesN(t *testing.T) {
+	s := New(2)
+	s.AddN("a", 5)
+	s.AddN("b", 3)
+	s.AddN("c", 4)
+
+	top := s.TopK(10)
+	counts := map[string]int{}
+	errs := map[string]int{}
+	for _, e := range top {
+		counts[e.Query] = e.Count
+		errs[e.Query] = e.Error
+	}
+	if counts["a"] != 5 {
+		t.Errorf("a count: got %d, want 5", counts["a"])
+	}
+	if counts["c"] != 7 {
+		t.Errorf("c count: got %d, want 3+4=7", counts["c"])
+	}
+	if errs["c"] != 3 {
+		t.Errorf("c err: got %d, want 3", errs["c"])
+	}
+}
+
+func TestMerge_EquivalentToAdd(t *testing.T) {
+	a := New(100)
+	b := New(100)
+	for i := 0; i < 50; i++ {
+		q := fmt.Sprintf("q-%d", i)
+		for j := 0; j <= i; j++ {
+			b.Add(q)
+		}
+	}
+	a.Merge(b)
+
+	for i := 0; i < 50; i++ {
+		q := fmt.Sprintf("q-%d", i)
+		var got Entry
+		for _, e := range a.TopK(100) {
+			if e.Query == q {
+				got = e
+				break
+			}
+		}
+		want := i + 1
+		if got.Count != want {
+			t.Errorf("%s: got %d, want %d", q, got.Count, want)
+		}
+	}
+}
+
+func BenchmarkMerge_5kQueries(b *testing.B) {
+	src := New(10_000)
+	rng := rand.New(rand.NewSource(1))
+	for i := 0; i < 100_000; i++ {
+		src.Add(fmt.Sprintf("q-%d", rng.Intn(5000)))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dst := New(10_000)
+		dst.Merge(src)
+	}
+}

@@ -49,8 +49,21 @@ func NewDeduper(cfg DedupConfig) *Deduper {
 	}
 }
 
+var keyBufPool = sync.Pool{
+	New: func() any {
+		buf := make([]byte, 0, 128)
+		return &buf
+	},
+}
+
 func (d *Deduper) Seen(userID, sessionID, query string) bool {
-	key := buildKey(userID, sessionID, query)
+	bufPtr := keyBufPool.Get().(*[]byte)
+	defer func() {
+		*bufPtr = (*bufPtr)[:0]
+		keyBufPool.Put(bufPtr)
+	}()
+	key := appendKey((*bufPtr)[:0], userID, sessionID, query)
+	*bufPtr = key
 
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -96,19 +109,14 @@ func (d *Deduper) Start(ctx context.Context) {
 	}()
 }
 
-func buildKey(userID, sessionID, query string) []byte {
-	var prefix string
-	var id string
+func appendKey(buf []byte, userID, sessionID, query string) []byte {
 	if userID != "" {
-		prefix = "u:"
-		id = userID
+		buf = append(buf, 'u', ':')
+		buf = append(buf, userID...)
 	} else {
-		prefix = "s:"
-		id = sessionID
+		buf = append(buf, 's', ':')
+		buf = append(buf, sessionID...)
 	}
-	buf := make([]byte, 0, len(prefix)+len(id)+1+len(query))
-	buf = append(buf, prefix...)
-	buf = append(buf, id...)
 	buf = append(buf, '|')
 	buf = append(buf, query...)
 	return buf

@@ -48,19 +48,26 @@ func (s *SpaceSaving) Cap() int {
 }
 
 func (s *SpaceSaving) Add(query string) {
+	s.AddN(query, 1)
+}
+
+func (s *SpaceSaving) AddN(query string, n int) {
+	if n <= 0 {
+		return
+	}
 	if existing, ok := s.slots[query]; ok {
-		s.incrementSlot(existing)
+		s.bumpSlot(existing, existing.count+n)
 		return
 	}
 
 	if len(s.slots) < s.capacity {
-		s.insertNewSlot(query, 1, 0)
+		s.insertNewSlot(query, n, 0)
 		return
 	}
 
 	victim := s.minBucket.head
 	victimBucket := s.minBucket
-	newCount := victimBucket.count + 1
+	newCount := victimBucket.count + n
 	errVal := victimBucket.count
 
 	delete(s.slots, victim.query)
@@ -106,19 +113,11 @@ func (s *SpaceSaving) Merge(other *SpaceSaving) {
 	if other == nil {
 		return
 	}
-	b := s.findMinBucket(other)
-	for b != nil {
+	for b := other.minBucket; b != nil; b = b.next {
 		for sl := b.head; sl != nil; sl = sl.next {
-			for i := 0; i < sl.count; i++ {
-				s.Add(sl.query)
-			}
+			s.AddN(sl.query, sl.count)
 		}
-		b = b.next
 	}
-}
-
-func (s *SpaceSaving) findMinBucket(other *SpaceSaving) *bucket {
-	return other.minBucket
 }
 
 func (s *SpaceSaving) findMaxBucket() *bucket {
@@ -132,9 +131,8 @@ func (s *SpaceSaving) findMaxBucket() *bucket {
 	return b
 }
 
-func (s *SpaceSaving) incrementSlot(sl *slot) {
+func (s *SpaceSaving) bumpSlot(sl *slot, newCount int) {
 	oldBucket := sl.parent
-	newCount := sl.count + 1
 
 	s.detachSlot(sl)
 	sl.count = newCount
