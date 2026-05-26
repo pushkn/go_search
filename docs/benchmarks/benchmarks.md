@@ -50,7 +50,7 @@ BenchmarkWindow_AddConcurrent-12    264 ns/op    13 B/op    1 alloc/op
 BenchmarkWindow_Snapshot-12         207 µs/op   757 KB/op   5036 allocs/op
 
 - 48 B / 1 alloc в `Add_Existing` - это новый бакет при инкременте счётчика.
-- `Window.Snapshot` - 207 µs на 5 минут * 30 бакетов * 10000 записей в каждом.
+- `Window.Snapshot` - 207 µs на 5 минут * 30 бакетов * 10000s записей в каждом.
 
 ## Micro-benchmarks: pipeline
 
