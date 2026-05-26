@@ -49,8 +49,8 @@ BenchmarkWindow_Add-12               59 ns/op    48 B/op    1 alloc/op
 BenchmarkWindow_AddConcurrent-12    264 ns/op    13 B/op    1 alloc/op
 BenchmarkWindow_Snapshot-12         207 µs/op   757 KB/op   5036 allocs/op
 
-- 48 B / 1 alloc в `Add_Existing` - это новый `bucket{}` при инкременте счётчика.
-- `Window.Snapshot` - 207 µs на 5 минут × 30 бакетов × 10k записей в каждом.
+- 48 B / 1 alloc в `Add_Existing` - это новый бакет при инкременте счётчика.
+- `Window.Snapshot` - 207 µs на 5 минут * 30 бакетов * 10000 записей в каждом.
 
 ## Micro-benchmarks: pipeline
 
@@ -63,8 +63,6 @@ BenchmarkBloom_AddParallel-12            47 ns/op    0 B/op    0 allocs/op
 BenchmarkDeduper_SeenNew-12             127 ns/op    0 B/op    0 allocs/op
 BenchmarkDeduper_SeenRepeated-12         61 ns/op    0 B/op    0 allocs/op
 BenchmarkDeduper_SeenParallel-12        165 ns/op    0 B/op    0 allocs/op
-
-Заметки:
 
 - **Anomaly Observe Existing**: 26 ns - это обновление EWMA для уже отслеживаемой query.
 - **Anomaly Observe New**: 251 ns - это создание новой `queryStats` структуры (одна аллокация).
